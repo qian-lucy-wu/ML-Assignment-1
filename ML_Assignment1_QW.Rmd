@@ -1,0 +1,390 @@
+# Question 1
+
+```{r}
+# Produce a matrix of random numbers drawn from N(0,1)
+set.seed(8242) # last 4 digits of my phone number
+M1 <- matrix(rnorm(10000*1001),nrow=10000, ncol = 1001)
+
+# Check if the above yields the exact same (“random”) dataset
+M1[1:10]
+M1[9990:10000]
+```
+
+# Question 2
+
+```{r}
+# Treat the first column as “y” and the remaining 1000 columns as x’s
+y <- M1[,1]
+x <- M1[,2:1001]
+```
+
+# Question 3,4
+
+```{r}
+# Regress y on x’s:
+# An intercept is needed here, because both y and x's are random numbers drawn from N(0,1).
+
+# Estimated model is: y = a0 + a1*x + e
+
+# obs<-10000                # obs in each single regression (no. of rows in matrix M1)
+Nloops<-1000            # number of experiments (no. of columns of x's in matrix M1)
+output<-numeric(Nloops) # vector holding p-values of estimated a1 parameter from Nloops experiments
+
+for(i in seq_along(output)){
+  
+  x<- M1[,1+i]
+  y<- M1[,1]
+  
+  # x and y are independent, so null hypothesis is true
+  output[i] <-(summary(lm(y~ x)) $ coefficients)[2,4] # we grab p-value of a1
+  
+}
+
+plot(hist(output), main="Histogram of p-values")
+# The histogram looks like a uniform distribution.
+
+# Formal statistical test (optional)
+ks.test(output,"punif") # Null hypothesis is that output distr. is uniform
+```
+
+# Question 5
+
+```{r}
+# How many "significant" variables to find?
+```
+
+1. Since the data was generated in a random way, I expect to find zero "significant" variables out of all 1,000 p-values.
+
+2. If alpha = 0.01,  the regression yields 1,000 * 0.01 = 10 "significant" variables.
+
+This tells us that we should not trust the results presented by R, and there is by chance 10 variables that are wrongly shown as significant in terms of 0.01 significant level.
+
+# Question 6
+
+```{r}
+# Use the BH procedure to control the FDR with a q of 0.1:
+pvals <- output
+q <- 0.1
+
+fdr <- function(pvals, q, plotit=TRUE){
+      pvals <- pvals[!is.na(pvals)]
+      N <- length(pvals)
+  
+      k <- rank(pvals, ties.method="min")
+      alpha <- max(pvals[ pvals <= (q*k/N) ])
+
+      td <- pvals[ pvals <= alpha ]
+      td <- data.frame(td)
+      no_td <- nrow(td)
+      
+  if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+      ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(no_td)
+}
+
+fdr(pvals, q)
+# We estimate zero "true" discoveries, and the plot also confirms that we cannot find the cut-off value in this case.
+```
+
+# Question 7
+
+```{r}
+autos <- read.csv("autos.csv")  # View(autos)
+
+# Data Exploration:
+
+hist(autos$price)
+
+## The histogram shows that the prices of autos are mostly lower than $10,000. The number of autos between price $10,000-15,000 and $15,000-20,000 are approximately the same, while those autos are more expensive than $20,000 take up a minor percentage among all vehicles.
+
+boxplot(autos$price, horizontal = TRUE)
+
+## In addition, the boxplot of prices show that outliers with extremely high price are distributed mainly between $30,000 and $40,000.
+```
+
+```{r}
+plot(autos$price ~ autos$horsepower)
+
+reg <- lm(autos$price ~ autos$horsepower)
+abline(reg, col = "red")
+## The first scatterplot shows that as the horsepower of autos increases, the price of auto also increases accordingly.
+
+plot(autos$price ~ autos$peak_rpm)
+plot(autos$price ~ autos$city_mpg)
+plot(autos$price ~ autos$highway_mpg)
+
+## The following three scatterplots show that for different values of peak_rpm, city_mpg, and highway_mpg, the mean and standard variation of auto price vary accordingly among different groups. In general, the higher the city_mpg/highway_mpg is, the lower the price is.
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(data = autos, aes(x= fuel_type, y= price)) + geom_boxplot()
+ggplot(data = autos, aes(x= aspiration, y= price)) + geom_boxplot()
+ggplot(data = autos, aes(x= body_style, y= price)) + geom_boxplot()
+ggplot(data = autos, aes(x= engine_type, y= price)) + geom_boxplot()
+
+# These boxplots similarly show that the distribution of price varies in terms of different fuel_type, aspiration, body_style, or engine_type. The four factors play an important role in determining the price of autos to customers. 
+```
+# Question 8
+
+```{r}
+# Create a linear regression model to predict price:
+
+# List of numeric variables
+wheel_base <- autos$wheel_base
+length <- autos$length
+width <- autos$width
+height <- autos$height
+curb_weight <- autos$curb_weight
+num_of_cylinders <- autos$num_of_cylinders
+engine_size <- autos$engine_size
+bore <- autos$bore
+stroke <- autos$stroke
+compression_ratio <- autos$compression_ratio
+horsepower <- autos$horsepower
+peak_rpm <- autos$peak_rpm
+city_mpg <- autos$city_mpg
+highway_mpg <- autos$highway_mpg
+
+price <- autos$price
+
+# Convert character to numeric value for "num_of_doors" variable
+num_of_doors <- ifelse(autos$num_of_doors == 'two', 2, 4)
+
+# Create dummy variables for non-numeric values
+gas_dummy <- ifelse(autos$fuel_type == "gas", 1, 0)
+
+std_dummy <- ifelse(autos$aspiration == 'std', 1, 0)
+
+convertible_dummy <- ifelse(autos$body_style == 'convertible', 1, 0)
+hardtop_dummy <- ifelse(autos$body_style == 'hardtop', 1, 0)
+hatchback_dummy <- ifelse(autos$body_style == 'hatchback', 1, 0)
+sedan_dummy <- ifelse(autos$body_style == 'sedan', 1, 0)
+
+fwd_dummy <- ifelse(autos$drive_wheels == 'fwd', 1, 0)
+rwd_dummy <- ifelse(autos$drive_wheels == 'rwd', 1, 0)
+
+front_dummy <- ifelse(autos$engine_location == 'front', 1, 0)
+
+dohc_dummy <- ifelse(autos$engine_type == 'dohc', 1, 0)
+ohc_dummy <- ifelse(autos$engine_type == 'ohc', 1, 0)
+ohcf_dummy <- ifelse(autos$engine_type == 'ohcf', 1, 0)
+ohcv_dummy <- ifelse(autos$engine_type == 'ohcv', 1, 0)
+
+lbbl_dummy <- ifelse(autos$fuel_system == '1bbl', 1, 0)
+idi_dummy <- ifelse(autos$fuel_system == 'idi', 1, 0)
+mfi_dummy <- ifelse(autos$fuel_system == 'mfi', 1, 0)
+mpfi_dummy <- ifelse(autos$fuel_system == 'mpfi', 1, 0)
+spdi_dummy <- ifelse(autos$fuel_system == 'spdi', 1, 0)
+spfi_dummy <- ifelse(autos$fuel_system == 'spfi', 1, 0)
+```
+
+```{r}
+### First run a regression model with all variables for a quick check for multicollinearity
+LM <- lm(price ~ wheel_base + length + width + height + curb_weight + num_of_cylinders + engine_size + bore + stroke
+         + compression_ratio + horsepower + peak_rpm + city_mpg + highway_mpg
+         + num_of_doors
+         + gas_dummy + std_dummy
+         + convertible_dummy + hardtop_dummy + hatchback_dummy + sedan_dummy
+         + fwd_dummy + rwd_dummy
+         + front_dummy
+         + dohc_dummy + ohc_dummy + ohcf_dummy + ohcv_dummy
+         + lbbl_dummy + idi_dummy + mfi_dummy + mpfi_dummy + spdi_dummy + spfi_dummy)
+
+## car::vif(LM)
+## "Error in vif.default(LM) : there are aliased coefficients in the model".
+## Evidence of multicollinearity.
+## The error indicates that two or more predictor variables in the model are highly (or perfectly) correlated.
+```
+
+```{r}
+### Store all vars + Dummy in a separate dataframe
+df_LM <- data.frame(price, wheel_base, length, width, height, curb_weight, num_of_cylinders, engine_size, bore, stroke, compression_ratio, horsepower, peak_rpm, city_mpg, highway_mpg, num_of_doors, gas_dummy, std_dummy, convertible_dummy, hardtop_dummy, hatchback_dummy, sedan_dummy, fwd_dummy, rwd_dummy, front_dummy, dohc_dummy, ohc_dummy, ohcf_dummy, ohcv_dummy, lbbl_dummy, idi_dummy, mfi_dummy, mpfi_dummy + spdi_dummy + spfi_dummy)
+
+### Create correlation matrix for this data frame
+cor(df_LM)
+
+## The matrix shows that there is high correlation between variables listed below: 
+
+## length/width/curb_weight and wheel_base, width and length/curb_weight/engine_size/highway_mpg, length/width/engine_size/horsepower/city_mpg/highway_mpg and curb_weight, num_of_cylinders and engine_size/horsepower, engine_size and horsepower/city_mpg/highway_mpg, compression_ratio and gas_dummy, horsepower and city_mpg/highway_mpg, city_mpg and highway_mpg, fwd_dummy and rwd_dummy, idi_dummy and compression_ratio, spfi_dummy and city_mpg.
+
+## Therefore, some variables can be removed from the original model, including:
+## length, width, curb_weight, horsepower, city_mpg, highway_mpg, num_of_cylinders, gas_dummy,idi_dummy, rwd_dummy, spfi_dummy.
+
+## Also, note that we need to keep/remove all dummy variables related to the same categorical variable (e.g. fuel_type).
+## Therefore, the variables that are determined to be removed from the model are:
+## length, width, curb_weight, horsepower, city_mpg, highway_mpg, num_of_cylinders,
+## gas_dummy,idi_dummy, lbbl_dummy, mfi_dummy, mpfi_dummy, spdi_dummy, spfi_dummy (in terms of fuel_system variable),
+## rwd_dummy,fwd_dummy (in terms of drive_wheels variable).
+```
+
+```{r}
+# Run a new regression model after removing the above unnecessary variables:
+LM2 <- lm(price ~ wheel_base + height + engine_size + bore + stroke
+         + compression_ratio + peak_rpm
+         + num_of_doors
+         + std_dummy
+         + convertible_dummy + hardtop_dummy + hatchback_dummy + sedan_dummy
+         + front_dummy
+         + dohc_dummy + ohc_dummy + ohcf_dummy + ohcv_dummy)
+
+car::vif(LM2)  ### No evidence of multicollinearity for the new model
+```
+
+```{r}
+### Run Forward Selection
+library(olsrr, warn.conflicts = FALSE)
+```
+
+```{r echo=T, results='hide'}
+fwd <- ols_step_forward_p(LM2, penter = 0.10, details = TRUE)
+```
+
+```{r}
+fwd
+```
+
+```{r echo=T, results='hide'}
+### Run Backward Elimination
+bwd <- ols_step_backward_p(LM2, prem = 0.10, details = TRUE)
+```
+
+```{r}
+bwd
+```
+
+```{r echo=T, results='hide'}
+### Run Stepwise Regression
+stepwise <- olsrr::ols_step_both_p(LM2, prem = 0.05, pent = 0.05, details = TRUE)
+```
+
+```{r}
+stepwise
+```
+
+```{r}
+### Consider selected variables only and create a separate data frame
+df_sel_var <- data.frame(price, engine_size, front_dummy, wheel_base, convertible_dummy, peak_rpm, std_dummy, stroke, ohc_dummy, bore, ohcv_dummy, sedan_dummy)
+
+## Exclude dummy variables that are associated with already-removed dummy variables (of the same categorical variable in autos dataset)
+df_sel_var_final <- data.frame(price, engine_size, front_dummy, wheel_base, peak_rpm, std_dummy, stroke, bore)
+
+### Quickly create a scatterplot to see if there is any evidence of nonlinearity.
+plot(df_sel_var_final) 
+### OR
+pairs(df_sel_var_final[1:2], panel = panel.smooth)
+```
+
+```{r}
+## Final Model (with 7 variables including 2 dummies)
+final_LM <- lm(price ~ engine_size + front_dummy + wheel_base + peak_rpm + std_dummy + stroke + bore)
+
+# Avoid scientific notation in R output
+options(scipen = 100, digits = 4)
+
+# Summary of model output
+summary(final_LM)
+```
+
+```{r}
+### Regression diagnostics...
+resids_final_LM <- residuals(final_LM)
+pred_final_LM <- predict(final_LM)
+
+plot(pred_final_LM, resids_final_LM)
+
+hist(resids_final_LM)
+```
+
+Therefore, the linear regression model is:
+
+price = -14166.588 + 154.226*engine_size -13223.996*front_dummy + 312.322*wheel_base + 1.750*peak_rpm -2389.925*std_dummy -2872.928*stroke -2347.913*bore.
+
+
+Interpretations:
+
+For every one unit increase in engine size, the price of autos increases by approximately $154.226. Other variables that are not dummy variables can also be explained in similar ways. 
+
+In addition, the dummy variables in the model show that if the engine location is not in the front/the aspiration is not std, the price of autos tends to be higher, and vice versa.
+
+# Question 9
+
+False discoveries can be an issue because if coefficients that are not significant are wrongly considered as significant, the result of our prediction model will be inaccurate and not reliable. Including variables that have little influence on determining prices might lead to overestimate/underestimate of the actual price. We can no longer rely on any inference based on that. 
+
+# Question 10
+
+```{r}
+# Use the BH procedure to control the FDR with a q of 0.1
+q <- 0.1
+
+# Obtain p-values from the above regression model
+pvals <- summary(final_LM)$coeff[2:8,4]
+
+# Show p-values (optional)
+as.vector(pvals)
+```
+
+```{r}
+## Extract p-value cutoff for E[fdp] < q (optional in this question), which is denoted as p*
+fdr <- function(pvals, q, plotit=FALSE){
+  pvals <- pvals[!is.na(pvals)]
+  N <- length(pvals)
+  
+  k <- rank(pvals, ties.method="min")
+  alpha <- max(pvals[ pvals <= (q*k/N) ])
+  
+  if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+      ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(alpha)
+}
+
+# Show the p-value cutoff result (optional)
+fdr(pvals,q)
+```
+
+```{r}
+# Define a function called td()
+# Set the output of td as the number of true discoveries (the number of p-values <= p*)
+
+td <- function(pvals, q, plotit=TRUE){
+  pvals <- pvals[!is.na(pvals)]
+  N <- length(pvals)
+  k <- rank(pvals, ties.method="min")
+  alpha <- round(max(pvals[ pvals <= (q*k/N) ]), digits = 9)
+  
+  td <- pvals[ pvals <= alpha ]
+  td <- data.frame(td)
+  no_td <- nrow(td)
+  
+    if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+      ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(no_td)
+}
+
+# Show output of the function when q=0.1
+# Also, plot the cutoff line together with the significant and insignificant p-values
+td(pvals,q)
+
+## We estimate there are 7 true discoveries in the final regression model.
+```
+
+
